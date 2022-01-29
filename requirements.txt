@@ -1,0 +1,6 @@
+cloudpickle==2.0.0
+gym==0.21.0
+gym-retro==0.8.0
+neat-python==0.92
+numpy==1.22.1
+pyglet==1.5.21
