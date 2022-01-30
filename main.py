@@ -1,74 +1,83 @@
-import pickle
+import multiprocessing
 
 import cv2
 import neat
 import numpy as np
 import retro
 
-env = retro.make('SuperMarioBros-Nes')
 
-imgarray = []
+class Worker:
+    def __init__(self, genome, config):
+        self.genome = genome
+        self.config = config
 
+    def work(self):
+        self.env = retro.make('SuperMarioBros-Nes')
+        self.env.reset()
 
-def eval_genomes(genomes, config):
-    for genome_id, genome in genomes:
-        ob = env.reset()
-        ac = env.action_space.sample()
+        ob, _, _, _, = self.env.step(self.env.action_space.sample())
 
-        inx, iny, inc = env.observation_space.shape
-
-        inx = int(inx / 8)
-        iny = int(iny / 8)
-
-        net = neat.nn.recurrent.RecurrentNetwork.create(genome, config)
-
-        current_max_fitness = 0
-        fitness_current = 0
-        frame = 0
-        counter = 0
-
+        inx = int(ob.shape[0] / 8)
+        iny = int(ob.shape[1] / 8)
         done = False
 
-        while not done:
+        net = neat.nn.FeedForwardNetwork.create(self.genome, self.config)
 
-            env.render()
-            frame += 1
+        fitness = 0
+        xpos = 0
+        xpos_max = 0
+        imgarray = []
+        counter = 0
+
+        while not done:
             ob = cv2.resize(ob, (inx, iny))
             ob = cv2.cvtColor(ob, cv2.COLOR_BGR2GRAY)
             ob = np.reshape(ob, (inx, iny))
 
             imgarray = np.ndarray.flatten(ob)
-            nn_output = net.activate(imgarray)
 
-            ob, rew, done, info = env.step(nn_output)
+            actions = net.activate(imgarray)
 
-            fitness_current += rew
+            ob, rew, done, info = self.env.step(actions)
 
-            if fitness_current > current_max_fitness:
-                current_max_fitness = fitness_current
+            xpos = info['xscrollLo']
+
+            if xpos > xpos_max:
+                xpos_max = xpos
                 counter = 0
+                fitness += 1
             else:
                 counter += 1
 
-            if done or counter == 250:
+            if counter > 250:
                 done = True
-                print(genome_id, fitness_current)
 
-            genome.fitness = fitness_current
+        print(fitness)
+        return fitness
 
 
-config = neat.Config(neat.DefaultGenome, neat.DefaultReproduction,
-                     neat.DefaultSpeciesSet, neat.DefaultStagnation,
-                     'config-feedforward')
+def eval_genomes(genome, config):
+    worker = Worker(genome, config)
+    worker.work()
 
-p = neat.Population(config)
 
-p.add_reporter(neat.StdOutReporter(True))
-stats = neat.StatisticsReporter()
-p.add_reporter(stats)
-p.add_reporter(neat.Checkpointer(10))
+def main():
+    config = neat.Config(neat.DefaultGenome, neat.DefaultReproduction,
+                         neat.DefaultSpeciesSet, neat.DefaultStagnation,
+                         'config-feedforward')
 
-winner = p.run(eval_genomes)
+    p = neat.Population(config)
 
-with open('winner.pkl', 'wb') as output:
-    pickle.dump(winner, output, 1)
+    p.add_reporter(neat.StdOutReporter(True))
+    stats = neat.StatisticsReporter()
+    p.add_reporter(stats)
+    p.add_reporter(neat.Checkpointer(10))
+
+    pe = neat.ParallelEvaluator(multiprocessing.cpu_count() - 2, eval_genomes)
+
+    winner = p.run(pe.evaluate)
+    return winner
+
+
+if __name__ == '__main__':
+    main()
