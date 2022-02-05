@@ -1,6 +1,6 @@
 .idea/
 venv/
-dist/
+models/
 .DS_Store
 neat-checkpoint-*
 *.pkl
