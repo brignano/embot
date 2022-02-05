@@ -16,7 +16,7 @@
         "reward": 0.75
       },
       "time": {
-        "reward": -0.5
+        "penalty": 0.5
       }
     }
   }
